@@ -1,0 +1,19 @@
+# Ignore macOS system files
+.DS_Store
+
+# Ignore model weights
+*.bin
+*.safetensors
+*.pt
+*.h5
+*.ckpt
+*.pickle
+*.pkl
+
+# Ignore model folders
+custom_financial_bert/
+custom_finbert/
+
+# Python cache
+__pycache__/
+.ipynb_checkpoints/
