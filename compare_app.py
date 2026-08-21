@@ -1,127 +1,86 @@
+"""Compare the custom classifier with ProsusAI/FinBERT."""
+
 import os
+from pathlib import Path
+
 import streamlit as st
 import torch
-import torch.nn.functional as F
-from transformers import (
-    AutoTokenizer,
-    AutoModelForSequenceClassification,
-    BertTokenizerFast,
-    BertForSequenceClassification
-)
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-# ======================================================
-# MUST BE FIRST STREAMLIT COMMAND
-# ======================================================
-st.set_page_config(page_title="FinSentiment Comparison", layout="wide")
+from inference import predict, require_local_model
 
-# ---------- Environment fixes ----------
-os.environ["TRANSFORMERS_NO_TF"] = "1"
-os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+st.set_page_config(page_title="Model Comparison", page_icon="📊", layout="wide")
 
+os.environ.setdefault("TRANSFORMERS_NO_TF", "1")
+os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+ROOT = Path(__file__).resolve().parent
+CUSTOM_MODEL_PATH = ROOT / "custom_financial_bert"
+FINBERT_ID = "ProsusAI/finbert"
 DEVICE = torch.device("cpu")
 
-CUSTOM_MODEL_PATH = "custom_financial_bert"
 
-# -----------------------------------------------------
-# Load models
-# -----------------------------------------------------
 @st.cache_resource
 def load_models():
-    # Custom model
-    custom_tok = AutoTokenizer.from_pretrained(
-        CUSTOM_MODEL_PATH,
-        local_files_only=True
+    custom_path = require_local_model(CUSTOM_MODEL_PATH)
+    custom_tokenizer = AutoTokenizer.from_pretrained(
+        custom_path, local_files_only=True
     )
-    custom_mod = AutoModelForSequenceClassification.from_pretrained(
-        CUSTOM_MODEL_PATH,
-        local_files_only=True
+    custom_model = AutoModelForSequenceClassification.from_pretrained(
+        custom_path, local_files_only=True
     ).to(DEVICE)
-    custom_mod.eval()
-
-    # FinBERT
-    fin_tok = AutoTokenizer.from_pretrained("ProsusAI/finbert")
-    fin_mod = AutoModelForSequenceClassification.from_pretrained("ProsusAI/finbert").to(DEVICE)
-    fin_mod.eval()
-
-    return custom_tok, custom_mod, fin_tok, fin_mod
-
-
-custom_tokenizer, custom_model, finbert_tokenizer, finbert_model = load_models()
-id2label = {0: "negative", 1: "neutral", 2: "positive"}
+    finbert_tokenizer = AutoTokenizer.from_pretrained(FINBERT_ID)
+    finbert_model = AutoModelForSequenceClassification.from_pretrained(
+        FINBERT_ID
+    ).to(DEVICE)
+    custom_model.eval()
+    finbert_model.eval()
+    return custom_tokenizer, custom_model, finbert_tokenizer, finbert_model
 
 
-# -----------------------------------------------------
-# Prediction function
-# -----------------------------------------------------
-def predict(text, tokenizer, model):
-    enc = tokenizer(text, return_tensors="pt", padding=True, truncation=True, max_length=256)
-    enc = {k: v.to(DEVICE) for k, v in enc.items()}
-    with torch.no_grad():
-        logits = model(**enc).logits
-    probs = F.softmax(logits, dim=-1)[0].cpu().numpy()
-    pred_idx = int(probs.argmax())
-    return id2label[pred_idx], probs
+def render_result(title, result):
+    st.header(title)
+    st.subheader(f"Prediction: {result['predicted_label'].title()}")
+    st.bar_chart(result["probabilities"])
+    for label, probability in result["probabilities"].items():
+        st.write(f"{label.title()}: **{probability:.2%}**")
 
 
-# -----------------------------------------------------
-# Streamlit UI
-# -----------------------------------------------------
-st.title("📊 Financial Sentiment Comparison Dashboard")
-st.write("Compare your **Custom BERT Model** with **ProsusAI/FinBERT** on any text.")
+st.title("📊 Financial Sentiment Model Comparison")
+st.write("Compare the custom BERT classifier with ProsusAI/FinBERT.")
+text = st.text_area(
+    "Financial text",
+    placeholder="Example: Quarterly earnings fell short of analyst expectations.",
+    height=140,
+)
 
-text = st.text_area("Enter financial or general text:", height=140)
-
-if st.button("Compare Models"):
+if st.button("Compare models", type="primary"):
     if not text.strip():
-        st.warning("Please enter some text.")
+        st.warning("Enter some financial text first.")
     else:
-        custom_label, custom_probs = predict(text, custom_tokenizer, custom_model)
-        fin_label, fin_probs = predict(text, finbert_tokenizer, finbert_model)
-
-        col1, col2 = st.columns(2)
-
-        # ----------------- Custom Model -----------------
-        with col1:
-            st.header("🔵 Your Custom BERT Model")
-            st.subheader(f"Prediction: **{custom_label.upper()}**")
-
-            st.bar_chart({
-                "negative": custom_probs[0],
-                "neutral": custom_probs[1],
-                "positive": custom_probs[2],
-            })
-
-            st.write("### Probability Values")
-            st.write(f"- Negative: **{custom_probs[0]:.4f}**")
-            st.write(f"- Neutral: **{custom_probs[1]:.4f}**")
-            st.write(f"- Positive: **{custom_probs[2]:.4f}**")
-
-        # ----------------- FinBERT -----------------
-        with col2:
-            st.header("🟢 ProsusAI / FinBERT")
-            st.subheader(f"Prediction: **{fin_label.upper()}**")
-
-            st.bar_chart({
-                "negative": fin_probs[0],
-                "neutral": fin_probs[1],
-                "positive": fin_probs[2],
-            })
-
-            st.write("### Probability Values")
-            st.write(f"- Negative: **{fin_probs[0]:.4f}**")
-            st.write(f"- Neutral: **{fin_probs[1]:.4f}**")
-            st.write(f"- Positive: **{fin_probs[2]:.4f}**")
-
-        st.write("---")
-        st.subheader("📌 Summary")
-
-        if custom_label == fin_label:
-            st.success(f"Both models agree: **{custom_label}**")
-        else:
-            st.error(
-                f"Models disagree!\n\n"
-                f"Your model → **{custom_label}**\n"
-                f"FinBERT → **{fin_label}**"
+        try:
+            custom_tokenizer, custom_model, finbert_tokenizer, finbert_model = (
+                load_models()
             )
+            custom_result = predict(text, custom_tokenizer, custom_model, DEVICE)
+            finbert_result = predict(text, finbert_tokenizer, finbert_model, DEVICE)
+        except (FileNotFoundError, OSError, ValueError) as error:
+            st.error(str(error))
+        else:
+            left, right = st.columns(2)
+            with left:
+                render_result("Custom BERT", custom_result)
+            with right:
+                render_result("ProsusAI/FinBERT", finbert_result)
 
-st.caption("NLP Project • Custom Financial Model vs FinBERT Comparison")
+            if custom_result["predicted_label"] == finbert_result["predicted_label"]:
+                st.success(
+                    f"Both models agree: {custom_result['predicted_label'].title()}"
+                )
+            else:
+                st.warning(
+                    "The models disagree: "
+                    f"Custom BERT predicts {custom_result['predicted_label']}; "
+                    f"FinBERT predicts {finbert_result['predicted_label']}."
+                )
+
+st.caption("The first FinBERT run downloads its model files from Hugging Face.")

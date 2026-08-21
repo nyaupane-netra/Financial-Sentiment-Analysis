@@ -17,3 +17,17 @@ custom_finbert/
 # Python cache
 __pycache__/
 .ipynb_checkpoints/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Local environments and editor settings
+.venv/
+venv/
+.env
+.vscode/
+
+# Training outputs and logs
+custom_finbert/
+runs/
+wandb/
