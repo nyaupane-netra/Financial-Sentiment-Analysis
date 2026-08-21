@@ -2,7 +2,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from inference import probabilities_by_label, require_local_model, resolve_label_map
+from financial_sentiment.core import (
+    normalize_text,
+    probabilities_by_label,
+    require_local_model,
+    resolve_label_map,
+)
 
 
 def model_with_labels(labels):
@@ -34,3 +39,12 @@ def test_probabilities_are_returned_in_canonical_order():
 def test_require_local_model_rejects_missing_checkpoint(tmp_path):
     with pytest.raises(FileNotFoundError):
         require_local_model(tmp_path / "missing")
+
+
+def test_normalize_text_trims_input():
+    assert normalize_text("  revenue increased  ") == "revenue increased"
+
+
+def test_normalize_text_rejects_oversized_input():
+    with pytest.raises(ValueError, match="5,000"):
+        normalize_text("x" * 5_001)

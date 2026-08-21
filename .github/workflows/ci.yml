@@ -16,6 +16,8 @@ jobs:
       - name: Install test tools
         run: python -m pip install -r requirements-dev.txt
       - name: Lint
-        run: ruff check app.py compare_app.py inference.py tests
+        run: |
+          ruff check .
+          ruff format --check .
       - name: Test
         run: python -m pytest -q

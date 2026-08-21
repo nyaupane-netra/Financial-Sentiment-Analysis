@@ -7,7 +7,7 @@ import streamlit as st
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-from inference import predict, require_local_model
+from financial_sentiment.core import predict, require_local_model
 
 st.set_page_config(page_title="Model Comparison", page_icon="📊", layout="wide")
 
@@ -22,16 +22,14 @@ DEVICE = torch.device("cpu")
 @st.cache_resource
 def load_models():
     custom_path = require_local_model(CUSTOM_MODEL_PATH)
-    custom_tokenizer = AutoTokenizer.from_pretrained(
-        custom_path, local_files_only=True
-    )
+    custom_tokenizer = AutoTokenizer.from_pretrained(custom_path, local_files_only=True)
     custom_model = AutoModelForSequenceClassification.from_pretrained(
         custom_path, local_files_only=True
     ).to(DEVICE)
     finbert_tokenizer = AutoTokenizer.from_pretrained(FINBERT_ID)
-    finbert_model = AutoModelForSequenceClassification.from_pretrained(
-        FINBERT_ID
-    ).to(DEVICE)
+    finbert_model = AutoModelForSequenceClassification.from_pretrained(FINBERT_ID).to(
+        DEVICE
+    )
     custom_model.eval()
     finbert_model.eval()
     return custom_tokenizer, custom_model, finbert_tokenizer, finbert_model

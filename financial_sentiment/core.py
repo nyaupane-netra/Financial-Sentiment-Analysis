@@ -1,4 +1,4 @@
-"""Shared inference utilities for the Streamlit applications."""
+"""Framework-light inference primitives shared by every application surface."""
 
 from __future__ import annotations
 
@@ -6,27 +6,32 @@ from pathlib import Path
 from typing import Any
 
 CANONICAL_LABELS = ("negative", "neutral", "positive")
+MAX_TEXT_LENGTH = 5_000
+
+
+def normalize_text(text: str) -> str:
+    """Validate and normalize one inference input."""
+
+    clean_text = text.strip()
+    if not clean_text:
+        raise ValueError("Text cannot be empty.")
+    if len(clean_text) > MAX_TEXT_LENGTH:
+        raise ValueError(f"Text cannot exceed {MAX_TEXT_LENGTH:,} characters.")
+    return clean_text
 
 
 def resolve_label_map(model: Any) -> dict[int, str]:
-    """Return a normalized label map from a Hugging Face model config.
-
-    Older custom checkpoints often contain generic labels such as ``LABEL_0``.
-    For those three-class checkpoints, this project uses its documented training
-    order: negative, neutral, positive.
-    """
+    """Return a normalized label map from a Hugging Face model config."""
 
     raw_map = getattr(getattr(model, "config", None), "id2label", {}) or {}
     normalized = {
-        int(index): str(label).strip().lower()
-        for index, label in raw_map.items()
+        int(index): str(label).strip().lower() for index, label in raw_map.items()
     }
 
     if set(normalized.values()) == set(CANONICAL_LABELS):
         return normalized
     if len(normalized) == 3 or not normalized:
         return dict(enumerate(CANONICAL_LABELS))
-
     raise ValueError(
         "The model must expose negative, neutral, and positive sentiment labels."
     )
@@ -39,7 +44,6 @@ def probabilities_by_label(
 
     if len(probabilities) != len(label_map):
         raise ValueError("Probability count does not match the model label count.")
-
     mapped = {
         label_map[index]: float(probability)
         for index, probability in enumerate(probabilities)
@@ -55,12 +59,8 @@ def predict(text: str, tokenizer: Any, model: Any, device: Any) -> dict[str, Any
 
     import torch
 
-    clean_text = text.strip()
-    if not clean_text:
-        raise ValueError("Text cannot be empty.")
-
     encoded = tokenizer(
-        clean_text,
+        normalize_text(text),
         return_tensors="pt",
         truncation=True,
         max_length=256,
@@ -72,8 +72,10 @@ def predict(text: str, tokenizer: Any, model: Any, device: Any) -> dict[str, Any
         values = torch.softmax(logits, dim=-1)[0].detach().cpu().tolist()
 
     probabilities = probabilities_by_label(values, resolve_label_map(model))
-    predicted_label = max(probabilities, key=probabilities.get)
-    return {"predicted_label": predicted_label, "probabilities": probabilities}
+    return {
+        "predicted_label": max(probabilities, key=probabilities.get),
+        "probabilities": probabilities,
+    }
 
 
 def require_local_model(path: Path) -> Path:

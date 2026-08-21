@@ -7,7 +7,7 @@ import streamlit as st
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-from inference import predict, require_local_model
+from financial_sentiment.core import predict, require_local_model
 
 st.set_page_config(page_title="Financial Sentiment Analysis", page_icon="📈")
 

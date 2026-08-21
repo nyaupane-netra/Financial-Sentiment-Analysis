@@ -26,6 +26,14 @@ __pycache__/
 venv/
 .env
 .vscode/
+.idea/
+
+# Coverage and build artifacts
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
 
 # Training outputs and logs
 custom_finbert/
